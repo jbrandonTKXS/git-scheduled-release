@@ -1,0 +1,118 @@
+parameters:
+  - name: PreviewOnly
+    displayName: Preview Changes Only?
+    type: string
+    default: No
+    values:
+      - No
+      - Yes
+
+  - name: DeployProd
+    displayName: Run Prod Pipeline Without Pausing?
+    type: string
+    default: No
+    values:
+      - No
+      - Yes
+
+trigger:
+  - release
+pr: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+
+  - name: stageEnvironment
+    value: 'staging'
+  - name: stageEnvSecrets
+    value: my_heroku_db_stage
+
+  - name: prodEnvironment
+    value: 'PROD-FMC-View-Data-DB'   
+  - name: prodEnvSecrets
+    value: my_heroku_db_prod
+ 
+stages:
+  - stage: PreBuildCheck
+    displayName: 'Verifying...'
+    jobs:
+    - job: Verify
+      steps:
+        - script: docker-compose up -d
+          displayName: 'Building Docker'
+        - script: docker-compose run --rm liquibase /liquibase/liquibase --defaultsFile "changelog/liquibase.properties" update
+          displayName: 'Testing Deploying to empty db'
+
+  - stage: Build
+    displayName: 'Building Liquibase Artifact'
+    dependsOn: PreBuildCheck
+    jobs:
+    - job: Build
+      steps:
+      - publish: $(Agent.BuildDirectory)/s/
+        artifact: changelogs
+
+  - stage: Stage
+    displayName: 'Deploy to Stage Environment'
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: Stage
+        workspace:
+          clean: all
+        environment: $(stageEnvironment)
+        strategy: 
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - template: liquibase-deploy-template.yml
+                  parameters:
+                    defaultsFileName: $(stageEnvSecrets)
+                    classpath: /liquibase/changelog
+                    masterChangelog: master.changelog.xml
+                    env: stage
+                    previewOnly: '${{ parameters.PreviewOnly }}'
+
+  - stage: WaitProd
+    displayName: 'Pausing...'
+    dependsOn: Stage
+    condition: and(succeeded(), eq('${{ parameters.DeployProd }}', 'No'))
+    jobs:
+      - job: Verify
+        steps:
+          - bash: echo "##vso[task.LogIssue type=warning;]You can resume this pipeline to deploy to the next step within 14 days.  The pipeline will timeout in 14 days." 
+      - job: waitForValidation
+        displayName: Resume Prod Deployment When Ready
+        pool: server    
+        timeoutInMinutes: 20160 # job times out in 14 days
+        steps:   
+        - task: ManualValidation@0
+          timeoutInMinutes: 20160 # task times out in 14 days
+          inputs:
+            instructions: 'Please resume the pipeline if (and when) ready.'
+            onTimeout: 'reject'
+
+  - stage: Prod
+    displayName: 'Deploy to Prod Environment'
+    dependsOn: WaitProd
+    condition: and(succeeded(), in(dependencies.WaitProd.result, 'Skipped', 'Succeeded'))
+    jobs:
+      - deployment: Prod
+        workspace:
+          clean: all
+        environment: $(prodEnvironment)
+        strategy: 
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+                - template: liquibase-deploy-template.yml
+                  parameters:
+                    defaultsFileName: $(prodEnvSecrets)
+                    classpath: /liquibase/changelog
+                    masterChangelog: master.changelog.xml
+                    env: prod
+                    previewOnly: '${{ parameters.PreviewOnly }}'
