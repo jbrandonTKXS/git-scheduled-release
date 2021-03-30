@@ -30,7 +30,7 @@ variables:
     value: my_heroku_db_stage
 
   - name: prodEnvironment
-    value: 'PROD-FMC-View-Data-DB'   
+    value: 'prod'   
   - name: prodEnvSecrets
     value: my_heroku_db_prod
  
