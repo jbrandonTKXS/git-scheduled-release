@@ -10,7 +10,7 @@ parameters:
   - name: DeployQA
     displayName: Run QA Pipeline Without Pausing?
     type: string
-    default: Yes
+    default: No
     values:
       - No
       - Yes
