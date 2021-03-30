@@ -69,7 +69,7 @@ stages:
                 - checkout: none
                 - template: liquibase-deploy-template.yml
                   parameters:
-                    defaultsFileName: $(qaEnvSecrets)
+                    defaultsFileName: $(devEnvSecrets)
                     classpath: /liquibase/changelog
                     masterChangelog: master.changelog.xml
                     env: dev
