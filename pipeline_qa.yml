@@ -10,7 +10,7 @@ parameters:
   - name: DeployQA
     displayName: Run QA Pipeline Without Pausing?
     type: string
-    default: Yes
+    default: No
     values:
       - No
       - Yes
@@ -69,7 +69,7 @@ stages:
                 - checkout: none
                 - template: liquibase-deploy-template.yml
                   parameters:
-                    defaultsFileName: $(qaEnvSecrets)
+                    defaultsFileName: $(devEnvSecrets)
                     classpath: /liquibase/changelog
                     masterChangelog: master.changelog.xml
                     env: dev
